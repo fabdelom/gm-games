@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Astralis Debug Client</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 16px; }
+      .row { margin-bottom: 10px; }
+      button { margin-right: 8px; }
+      #log { background: #111; color: #0f0; padding: 10px; min-height: 180px; white-space: pre-wrap; }
+      #grid {
+        margin: 12px 0;
+        display: grid;
+        grid-template-columns: repeat(10, 28px);
+        gap: 2px;
+      }
+      .cell {
+        width: 28px;
+        height: 28px;
+        background: #eee;
+        border: 1px solid #ccc;
+        box-sizing: border-box;
+      }
+      .cell.player { background: #4caf50; }
+      .cell.in-range { outline: 2px solid #64b5f6; }
+      #spellBar { display: flex; gap: 6px; margin-top: 6px; }
+      .spell-slot { border: 1px solid #888; padding: 6px; min-width: 110px; font-size: 12px; cursor: pointer; }
+      .spell-slot.selected { border-color: #1976d2; background: #e3f2fd; }
+      .spell-slot.disabled { opacity: 0.5; }
+    </style>
+  </head>
+  <body>
+    <h1>Astralis v0.1 - Debug Client</h1>
+    <div class="row">
+      <button id="joinBtn">Join map_001</button>
+      <button id="leftBtn">Move Left</button>
+      <button id="rightBtn">Move Right</button>
+      <button id="upBtn">Move Up</button>
+      <button id="downBtn">Move Down</button>
+    </div>
+    <div class="row">Position locale: <span id="pos">(0,0)</span></div>
+    <div class="row">Dernière erreur: <span id="lastError">Aucune</span></div>
+    <div class="row">
+      <small>Légende: <span style="color:#4caf50">■ Toi</span> / <span style="color:#ff9800">■ Autre joueur</span></small>
+    </div>
+    <div class="row">
+      <label for="classSelect">Classe:</label>
+      <select id="classSelect"></select>
+      <label for="skinSelect">Skin:</label>
+      <select id="skinSelect"></select>
+    </div>
+    <div class="row">
+      <strong>Sorts disponibles</strong>
+      <ul id="spellsList"></ul>
+    </div>
+    <div class="row">
+      <strong>Détail du sort sélectionné</strong>
+      <div id="spellDetail">Sélectionne une classe pour afficher les détails.</div>
+    </div>
+    <div class="row">
+      <strong>Équipement (mock)</strong>
+      <ul id="equipmentList"></ul>
+    </div>
+    <div class="row">
+      <strong>HUD Combat (mock)</strong>
+      <div>PV: <span id="hudHp">50</span> | PA: <span id="hudPa">6</span> | PM: <span id="hudPm">3</span></div>
+      <button id="endTurnBtn">Fin de tour</button>
+      <button id="castSpellBtn">Lancer sort sélectionné</button>
+    </div>
+    <div class="row">
+      <strong>Barre de sorts (1-4)</strong>
+      <div id="spellBar"></div>
+    </div>
+    <div id="grid"></div>
+    <div id="log"></div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
