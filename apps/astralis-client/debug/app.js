@@ -66,6 +66,7 @@ class LocalAuthoritativeSimulator {
 
 const logEl = document.getElementById("log");
 const posEl = document.getElementById("pos");
+const gameModeEl = document.getElementById("gameMode");
 const gridEl = document.getElementById("grid");
 const lastErrorEl = document.getElementById("lastError");
 const classSelectEl = document.getElementById("classSelect");
@@ -79,6 +80,9 @@ const hudPmEl = document.getElementById("hudPm");
 const endTurnBtn = document.getElementById("endTurnBtn");
 const castSpellBtn = document.getElementById("castSpellBtn");
 const spellBarEl = document.getElementById("spellBar");
+const enterCombatBtn = document.getElementById("enterCombatBtn");
+const isoCanvas = document.getElementById("isoCanvas");
+const isoCtx = isoCanvas ? isoCanvas.getContext("2d") : null;
 const GRID_SIZE = 10;
 const CLASS_CONFIG = {
 	GARDIEN: {
@@ -193,18 +197,58 @@ const log = msg => {
 	logEl.textContent += `${msg}\n`;
 };
 
+const isoProject = (x, y) => ({
+	x: 320 + (x - y) * 18,
+	y: 70 + (x + y) * 10,
+});
+
+const renderIsoScene = playerPos => {
+	if (!isoCtx) {
+		return;
+	}
+	isoCtx.clearRect(0, 0, isoCanvas.width, isoCanvas.height);
+	for (let y = 0; y < 10; y += 1) {
+		for (let x = 0; x < 10; x += 1) {
+			const p = isoProject(x, y);
+			isoCtx.beginPath();
+			isoCtx.moveTo(p.x, p.y);
+			isoCtx.lineTo(p.x + 18, p.y + 10);
+			isoCtx.lineTo(p.x, p.y + 20);
+			isoCtx.lineTo(p.x - 18, p.y + 10);
+			isoCtx.closePath();
+			isoCtx.fillStyle = (x + y) % 2 === 0 ? "#4f8a4f" : "#5a9a5a";
+			isoCtx.fill();
+			isoCtx.strokeStyle = "rgba(0,0,0,0.25)";
+			isoCtx.stroke();
+		}
+	}
+	const enemy = isoProject(1, 1);
+	isoCtx.fillStyle = "#ef4444";
+	isoCtx.beginPath();
+	isoCtx.arc(enemy.x, enemy.y + 8, 7, 0, Math.PI * 2);
+	isoCtx.fill();
+
+	const hero = isoProject(playerPos.x, playerPos.y);
+	isoCtx.fillStyle = "#3b82f6";
+	isoCtx.beginPath();
+	isoCtx.arc(hero.x, hero.y + 8, 7, 0, Math.PI * 2);
+	isoCtx.fill();
+};
+
 const hudState = {
 	hp: 50,
 	pa: 6,
 	pm: 3,
 	selectedSpell: null,
 	cooldowns: {},
+	mode: "EXPLORATION",
 };
 
 const renderHud = () => {
 	hudHpEl.textContent = String(hudState.hp);
 	hudPaEl.textContent = String(hudState.pa);
 	hudPmEl.textContent = String(hudState.pm);
+	gameModeEl.textContent = hudState.mode === "COMBAT" ? "Combat" : "Exploration";
 };
 
 const simulator = new LocalAuthoritativeSimulator();
@@ -289,6 +333,7 @@ const renderSpells = className => {
 				{ characterId: "debug-char", x: p.x, y: p.y },
 				{ characterId: "debug-char-2", x: 1, y: 1 },
 			]);
+			renderIsoScene(p);
 		});
 		spellsListEl.appendChild(li);
 	});
@@ -322,6 +367,7 @@ const renderSpellBar = className => {
 				{ characterId: "debug-char", x: p.x, y: p.y },
 				{ characterId: "debug-char-2", x: 1, y: 1 },
 			]);
+			renderIsoScene(p);
 		});
 		spellBarEl.appendChild(slot);
 	});
@@ -363,6 +409,7 @@ window.onServerMessage = message => {
 				{ characterId: "debug-char-2", x: 1, y: 1 },
 			];
 			renderGrid(players);
+			renderIsoScene(payload.to);
 		} else {
 			lastErrorEl.textContent = payload.reason || "UNKNOWN";
 		}
@@ -418,14 +465,18 @@ const renderGrid = players => {
 			cell.addEventListener("click", () => client.moveTo(x, y));
 			const key = `${x}:${y}`;
 			const playerId = byPos.get(key);
-			if (playerId) {
-				cell.classList.add("player");
-				if (playerId !== "debug-char") {
-					cell.style.background = "#ff9800";
+				if (playerId) {
+					cell.classList.add("player");
+					if (playerId !== "debug-char") {
+						cell.style.background = "#ff9800";
+						cell.innerHTML = "<span>👾</span>";
+					} else {
+						cell.innerHTML = "<span>🧙</span>";
+					}
+				} else if (maxRange > 0 && manhattan(me, { x, y }) <= maxRange) {
+					cell.classList.add("in-range");
+					cell.innerHTML = "<span>·</span>";
 				}
-			} else if (maxRange > 0 && manhattan(me, { x, y }) <= maxRange) {
-				cell.classList.add("in-range");
-			}
 			gridEl.appendChild(cell);
 		}
 	}
@@ -435,6 +486,7 @@ renderGrid([
 	{ characterId: "debug-char", x: 0, y: 0 },
 	{ characterId: "debug-char-2", x: 1, y: 1 },
 ]);
+renderIsoScene({ x: 0, y: 0 });
 
 renderClassOptions();
 syncClassUI("GARDIEN");
@@ -465,9 +517,14 @@ document.addEventListener("keydown", event => {
 		{ characterId: "debug-char", x: p.x, y: p.y },
 		{ characterId: "debug-char-2", x: 1, y: 1 },
 	]);
+	renderIsoScene(p);
 });
 
 endTurnBtn.addEventListener("click", () => {
+	if (hudState.mode !== "COMBAT") {
+		log("[TURN] Impossible: tu n'es pas en combat.");
+		return;
+	}
 	hudState.pa = 6;
 	hudState.pm = 3;
 	for (const name of Object.keys(hudState.cooldowns)) {
@@ -480,6 +537,10 @@ endTurnBtn.addEventListener("click", () => {
 });
 
 castSpellBtn.addEventListener("click", () => {
+	if (hudState.mode !== "COMBAT") {
+		log("[SPELL] Entre en combat d'abord.");
+		return;
+	}
 	if (!hudState.selectedSpell) {
 		log("[SPELL] Aucun sort sélectionné.");
 		return;
@@ -506,3 +567,21 @@ castSpellBtn.addEventListener("click", () => {
 });
 
 renderHud();
+
+enterCombatBtn.addEventListener("click", () => {
+	const p = parsePos();
+	const enemyPos = { x: 1, y: 1 };
+	const dist = manhattan(p, enemyPos);
+	if (dist > 2) {
+		log("[COMBAT] Approche-toi d'un groupe de monstres pour engager le combat.");
+		return;
+	}
+	hudState.mode = "COMBAT";
+	hudState.pa = 6;
+	hudState.pm = 3;
+	hudState.cooldowns = {};
+	renderHud();
+	renderSpells(classSelectEl.value);
+	renderSpellBar(classSelectEl.value);
+	log("[COMBAT] Combat instancié lancé !");
+});
