@@ -24,7 +24,13 @@
 		"test": "node tools/pre-test.js && jest",
 		"test-e2e": "node tools/pre-test.js && karma start karma.conf.js",
 		"test-e2e-watch": "node tools/pre-test.js && karma start karma.conf.js --auto-watch --no-single-run",
-		"test-e2e-browserstack": "node tools/pre-test.js && karma start karma-browserstack.conf.js"
+		"test-e2e-browserstack": "node tools/pre-test.js && karma start karma-browserstack.conf.js",
+		"astralis:dev:up": "docker compose -f infra/docker/docker-compose.astralis.yml up -d",
+		"astralis:dev:down": "docker compose -f infra/docker/docker-compose.astralis.yml down",
+		"astralis:client:serve": "node tools/astralis-client-dev-server.js",
+		"astralis:nakama:test": "node apps/astralis-nakama/modules/map_match.test.js",
+		"astralis:client:test": "node apps/astralis-client/src/realtimeClient.test.js",
+		"astralis:sim:test": "node apps/astralis-client/src/localAuthoritativeSimulator.test.js"
 	},
 	"lint-staged": {
 		"*.{js,json,scss,ts,tsx}": "prettier --write"

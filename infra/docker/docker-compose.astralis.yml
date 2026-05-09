@@ -1,0 +1,45 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: astralis-postgres
+    environment:
+      POSTGRES_DB: nakama
+      POSTGRES_USER: nakama
+      POSTGRES_PASSWORD: localdev
+    ports:
+      - "5432:5432"
+    volumes:
+      - astralis-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nakama -d nakama"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  nakama:
+    image: heroiclabs/nakama:3.20.0
+    container_name: astralis-nakama
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint:
+      - /bin/sh
+      - -ecx
+      - >
+        /nakama/nakama migrate up --database.address postgres:nakama@postgres:5432/nakama &&
+        exec /nakama/nakama --name astralis-nakama
+        --database.address postgres:nakama@postgres:5432/nakama
+        --logger.level INFO
+        --session.token_expiry_sec 7200
+        --runtime.path /nakama/data/modules
+    ports:
+      - "7349:7349"
+      - "7350:7350"
+      - "7351:7351"
+    volumes:
+      - ../../apps/astralis-nakama/modules:/nakama/data/modules
+
+volumes:
+  astralis-postgres-data:
