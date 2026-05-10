@@ -3,6 +3,8 @@ const OPS = {
 	MAP_STATE: 1002,
 	MOVE_REQUEST: 1003,
 	MOVE_RESULT: 1004,
+	START_COMBAT_REQUEST: 1005,
+	PHASE_RESULT: 1006,
 };
 
 const DEFAULT_MAP_BOUNDS = { width: 20, height: 20 };
@@ -26,8 +28,10 @@ const isInsideMap = (x, y, bounds = DEFAULT_MAP_BOUNDS) =>
 	x < bounds.width &&
 	y < bounds.height;
 
+const PLACEMENT_ROWS = 3;
+
 const findSpawnCell = state => {
-	for (let y = 0; y < state.bounds.height; y += 1) {
+	for (let y = 0; y < Math.min(PLACEMENT_ROWS, state.bounds.height); y += 1) {
 		for (let x = 0; x < state.bounds.width; x += 1) {
 			if (!state.occupied[keyFor(x, y)]) {
 				return { x, y };
@@ -46,6 +50,7 @@ const mapInit = (ctx, logger, nk, params) => {
 		byUserId: {},
 		occupied: {},
 		tick: 0,
+		phase: "PLACEMENT",
 	};
 
 	logger.info(`Astralis map match initialized for ${mapId}`);
@@ -87,6 +92,7 @@ const mapJoin = (ctx, logger, nk, dispatcher, tick, state, presences) => {
 
 	const payload = JSON.stringify({
 		mapId: state.mapId,
+		phase: state.phase,
 		players: Object.values(state.presences).map(p => ({
 			characterId: p.characterId,
 			classType: p.classType,
@@ -113,6 +119,7 @@ const mapLeave = (ctx, logger, nk, dispatcher, tick, state, presences) => {
 
 	const payload = JSON.stringify({
 		mapId: state.mapId,
+		phase: state.phase,
 		players: Object.values(state.presences).map(p => ({
 			characterId: p.characterId,
 			classType: p.classType,
@@ -129,6 +136,18 @@ const mapLoop = (ctx, logger, nk, dispatcher, tick, state, messages) => {
 	state.tick = tick;
 
 	for (const message of messages) {
+		if (message.opCode === OPS.START_COMBAT_REQUEST) {
+			const senderId = message.sender && message.sender.sessionId;
+			if (!senderId || !state.presences[senderId] || state.phase === "COMBAT") {
+				continue;
+			}
+
+			state.phase = "COMBAT";
+			const phaseResult = JSON.stringify({ phase: state.phase });
+			dispatcher.broadcastMessage(OPS.PHASE_RESULT, phaseResult);
+			continue;
+		}
+
 		if (message.opCode !== OPS.MOVE_REQUEST) {
 			continue;
 		}
@@ -149,7 +168,9 @@ const mapLoop = (ctx, logger, nk, dispatcher, tick, state, messages) => {
 		let reason = null;
 		const from = { x: player.x, y: player.y };
 
-		if (player.lastMoveTick === tick) {
+		if (state.phase !== "COMBAT") {
+			reason = "NOT_IN_COMBAT";
+		} else if (player.lastMoveTick === tick) {
 			reason = "TOO_FAST";
 		} else if (!validCell) {
 			reason = "INVALID_CELL";

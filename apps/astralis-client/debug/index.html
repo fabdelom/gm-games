@@ -82,6 +82,9 @@
     </div>
     <div class="row">Position locale: <span id="pos">(0,0)</span></div>
     <div class="row">Mode: <span id="gameMode">Exploration</span> <button id="enterCombatBtn">Entrer en combat</button></div>
+    <div class="row"><button id="startCombatBtn">Valider placement / Démarrer combat</button></div>
+    <div class="row">Initiative: <span id="initiativeOrder">PLAYER > ENEMY</span></div>
+    <div class="row"><button id="resetRunBtn">Nouvelle partie</button></div>
     <div class="row">Dernière erreur: <span id="lastError">Aucune</span></div>
     <div class="row">
       <small>Légende: <span style="color:#4caf50">■ Toi</span> / <span style="color:#ff9800">■ Autre joueur</span></small>
@@ -106,7 +109,7 @@
     </div>
     <div class="row">
       <strong>HUD Combat (mock)</strong>
-      <div>PV: <span id="hudHp">50</span> | PA: <span id="hudPa">6</span> | PM: <span id="hudPm">3</span> | Ennemi PV: <span id="enemyHp">45</span></div>
+      <div>PV: <span id="hudHp">50</span> | PA: <span id="hudPa">6</span> | PM: <span id="hudPm">3</span> | Ennemi PV: <span id="enemyHp">45</span> | Tour: <span id="turnOwner">-</span></div>
       <button id="endTurnBtn">Fin de tour</button>
       <button id="castSpellBtn">Lancer sort sélectionné</button>
     </div>

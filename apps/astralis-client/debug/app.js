@@ -67,6 +67,7 @@ class LocalAuthoritativeSimulator {
 const logEl = document.getElementById("log");
 const posEl = document.getElementById("pos");
 const gameModeEl = document.getElementById("gameMode");
+const initiativeOrderEl = document.getElementById("initiativeOrder");
 const gridEl = document.getElementById("grid");
 const lastErrorEl = document.getElementById("lastError");
 const classSelectEl = document.getElementById("classSelect");
@@ -79,8 +80,11 @@ const hudPaEl = document.getElementById("hudPa");
 const hudPmEl = document.getElementById("hudPm");
 const endTurnBtn = document.getElementById("endTurnBtn");
 const castSpellBtn = document.getElementById("castSpellBtn");
+const turnOwnerEl = document.getElementById("turnOwner");
 const spellBarEl = document.getElementById("spellBar");
 const enterCombatBtn = document.getElementById("enterCombatBtn");
+const resetRunBtn = document.getElementById("resetRunBtn");
+const startCombatBtn = document.getElementById("startCombatBtn");
 const isoCanvas = document.getElementById("isoCanvas");
 const isoCtx = isoCanvas ? isoCanvas.getContext("2d") : null;
 const GRID_SIZE = 10;
@@ -202,14 +206,37 @@ const isoProject = (x, y) => ({
 	y: 70 + (x + y) * 10,
 });
 
+let sceneTime = 0;
+
+const drawToken = (x, y, color, bob = 0) => {
+	const pos = isoProject(x, y);
+	const cy = pos.y + 8 + bob;
+	isoCtx.fillStyle = "rgba(0,0,0,0.25)";
+	isoCtx.beginPath();
+	isoCtx.ellipse(pos.x, pos.y + 15, 9, 4, 0, 0, Math.PI * 2);
+	isoCtx.fill();
+	isoCtx.fillStyle = color;
+	isoCtx.beginPath();
+	isoCtx.arc(pos.x, cy, 7, 0, Math.PI * 2);
+	isoCtx.fill();
+	isoCtx.fillStyle = "rgba(255,255,255,0.28)";
+	isoCtx.beginPath();
+	isoCtx.arc(pos.x - 2, cy - 2, 2, 0, Math.PI * 2);
+	isoCtx.fill();
+};
+
 const renderIsoScene = playerPos => {
 	if (!isoCtx) {
 		return;
 	}
 	isoCtx.clearRect(0, 0, isoCanvas.width, isoCanvas.height);
+	const pulse = (Math.sin(sceneTime / 380) + 1) * 0.5;
+	const pulseAlpha = 0.25 + pulse * 0.35;
 	for (let y = 0; y < 10; y += 1) {
 		for (let x = 0; x < 10; x += 1) {
 			const p = isoProject(x, y);
+			const inPlacementZone = hudState.mode === "PLACEMENT" && y <= 2;
+			const inEnemyZone = hudState.mode === "PLACEMENT" && y >= 7;
 			isoCtx.beginPath();
 			isoCtx.moveTo(p.x, p.y);
 			isoCtx.lineTo(p.x + 18, p.y + 10);
@@ -217,22 +244,24 @@ const renderIsoScene = playerPos => {
 			isoCtx.lineTo(p.x - 18, p.y + 10);
 			isoCtx.closePath();
 			isoCtx.fillStyle = (x + y) % 2 === 0 ? "#4f8a4f" : "#5a9a5a";
+			if (inPlacementZone) {
+				isoCtx.fillStyle = `rgba(74, 222, 128, ${pulseAlpha})`;
+			}
+			if (inEnemyZone) {
+				isoCtx.fillStyle = `rgba(248, 113, 113, ${pulseAlpha})`;
+			}
 			isoCtx.fill();
 			isoCtx.strokeStyle = "rgba(0,0,0,0.25)";
 			isoCtx.stroke();
 		}
 	}
-	const enemy = isoProject(1, 1);
-	isoCtx.fillStyle = "#ef4444";
-	isoCtx.beginPath();
-	isoCtx.arc(enemy.x, enemy.y + 8, 7, 0, Math.PI * 2);
-	isoCtx.fill();
+	if (hudState.enemyHp > 0) {
+		const enemyBob = Math.sin(sceneTime / 240 + 1.5) * 1.8;
+		drawToken(hudState.enemyPos.x, hudState.enemyPos.y, "#ef4444", enemyBob);
+	}
 
-	const hero = isoProject(playerPos.x, playerPos.y);
-	isoCtx.fillStyle = "#3b82f6";
-	isoCtx.beginPath();
-	isoCtx.arc(hero.x, hero.y + 8, 7, 0, Math.PI * 2);
-	isoCtx.fill();
+	const heroBob = Math.sin(sceneTime / 260) * 1.8;
+	drawToken(playerPos.x, playerPos.y, "#3b82f6", heroBob);
 };
 
 const hudState = {
@@ -242,13 +271,50 @@ const hudState = {
 	selectedSpell: null,
 	cooldowns: {},
 	mode: "EXPLORATION",
+	enemyHp: 45,
+	enemyPos: { x: 1, y: 1 },
+	turn: "NONE",
+	initiative: ["PLAYER", "ENEMY"],
 };
 
 const renderHud = () => {
 	hudHpEl.textContent = String(hudState.hp);
 	hudPaEl.textContent = String(hudState.pa);
 	hudPmEl.textContent = String(hudState.pm);
-	gameModeEl.textContent = hudState.mode === "COMBAT" ? "Combat" : "Exploration";
+	enemyHpEl.textContent = String(hudState.enemyHp);
+	turnOwnerEl.textContent = hudState.turn;
+	initiativeOrderEl.textContent = hudState.initiative.join(" > ");
+	if (hudState.mode === "EXPLORATION") {
+		gameModeEl.textContent = "Exploration";
+	} else if (hudState.mode === "PLACEMENT") {
+		gameModeEl.textContent = "Placement";
+	} else {
+		gameModeEl.textContent = "Combat";
+	}
+};
+
+const enemyTakeTurn = () => {
+	if (hudState.enemyHp <= 0) {
+		return;
+	}
+	const enemyDamage = 5;
+	const playerPos = parsePos();
+	if (hudState.enemyPos.x < playerPos.x) {
+		hudState.enemyPos.x += 1;
+	} else if (hudState.enemyPos.x > playerPos.x) {
+		hudState.enemyPos.x -= 1;
+	} else if (hudState.enemyPos.y < playerPos.y) {
+		hudState.enemyPos.y += 1;
+	} else if (hudState.enemyPos.y > playerPos.y) {
+		hudState.enemyPos.y -= 1;
+	}
+	hudState.hp = Math.max(0, hudState.hp - enemyDamage);
+	log(`[ENEMY] Le monstre inflige ${enemyDamage} dégâts.`);
+	renderHud();
+	renderIsoScene(playerPos);
+	if (hudState.hp <= 0) {
+		log("[DEFAITE] Tu es KO.");
+	}
 };
 
 const simulator = new LocalAuthoritativeSimulator();
@@ -462,21 +528,47 @@ const renderGrid = players => {
 			const cell = document.createElement("div");
 			cell.className = "cell";
 			cell.title = `(${x},${y})`;
-			cell.addEventListener("click", () => client.moveTo(x, y));
+			cell.addEventListener("click", () => {
+				if (hudState.mode === "PLACEMENT") {
+					if (y > 2) {
+						log(
+							"[PLACEMENT] Choisis une case de départ dans la zone haute (lignes 0 à 2).",
+						);
+						return;
+					}
+					posEl.textContent = `(${x},${y})`;
+					renderGrid([
+						{ characterId: "debug-char", x, y },
+						{ characterId: "debug-char-2", x: 1, y: 1 },
+					]);
+					renderIsoScene({ x, y });
+					log(`[PLACEMENT] Position de départ fixée sur (${x},${y}).`);
+					return;
+				}
+				client.moveTo(x, y);
+			});
 			const key = `${x}:${y}`;
 			const playerId = byPos.get(key);
-				if (playerId) {
-					cell.classList.add("player");
-					if (playerId !== "debug-char") {
-						cell.style.background = "#ff9800";
-						cell.innerHTML = "<span>👾</span>";
-					} else {
-						cell.innerHTML = "<span>🧙</span>";
-					}
-				} else if (maxRange > 0 && manhattan(me, { x, y }) <= maxRange) {
-					cell.classList.add("in-range");
-					cell.innerHTML = "<span>·</span>";
+			if (hudState.mode === "PLACEMENT") {
+				if (y <= 2) {
+					cell.style.boxShadow = "inset 0 0 0 2px rgba(52,211,153,0.65)";
 				}
+				if (y >= 7) {
+					cell.style.boxShadow = "inset 0 0 0 2px rgba(248,113,113,0.65)";
+				}
+			}
+			if (playerId) {
+				cell.classList.add("player");
+				if (playerId !== "debug-char") {
+					cell.style.background = "#ff9800";
+					cell.innerHTML = "<span>👾</span>";
+				} else {
+					cell.innerHTML = "<span>🧙</span>";
+				}
+			} else if (maxRange > 0 && manhattan(me, { x, y }) <= maxRange) {
+				cell.classList.add("in-range");
+				cell.innerHTML = "<span>·</span>";
+			}
 			gridEl.appendChild(cell);
 		}
 	}
@@ -487,6 +579,13 @@ renderGrid([
 	{ characterId: "debug-char-2", x: 1, y: 1 },
 ]);
 renderIsoScene({ x: 0, y: 0 });
+
+const animateScene = now => {
+	sceneTime = now;
+	renderIsoScene(parsePos());
+	requestAnimationFrame(animateScene);
+};
+requestAnimationFrame(animateScene);
 
 renderClassOptions();
 syncClassUI("GARDIEN");
@@ -525,6 +624,11 @@ endTurnBtn.addEventListener("click", () => {
 		log("[TURN] Impossible: tu n'es pas en combat.");
 		return;
 	}
+	if (hudState.turn !== "PLAYER") {
+		log("[TURN] Ce n'est pas ton tour.");
+		return;
+	}
+	hudState.turn = "ENEMY";
 	hudState.pa = 6;
 	hudState.pm = 3;
 	for (const name of Object.keys(hudState.cooldowns)) {
@@ -533,12 +637,19 @@ endTurnBtn.addEventListener("click", () => {
 	renderSpells(classSelectEl.value);
 	renderSpellBar(classSelectEl.value);
 	renderHud();
+	enemyTakeTurn();
+	hudState.turn = "PLAYER";
+	renderHud();
 	log("[TURN] Nouveau tour: PA/PM réinitialisés.");
 });
 
 castSpellBtn.addEventListener("click", () => {
 	if (hudState.mode !== "COMBAT") {
-		log("[SPELL] Entre en combat d'abord.");
+		log("[SPELL] Le combat n'est pas encore démarré.");
+		return;
+	}
+	if (hudState.turn !== "PLAYER") {
+		log("[SPELL] Ce n'est pas ton tour.");
 		return;
 	}
 	if (!hudState.selectedSpell) {
@@ -561,6 +672,23 @@ castSpellBtn.addEventListener("click", () => {
 	renderHud();
 	renderSpells(classSelectEl.value);
 	renderSpellBar(classSelectEl.value);
+	const p = parsePos();
+	if (
+		hudState.enemyHp > 0 &&
+		manhattan(p, hudState.enemyPos) <= getMaxRange(hudState.selectedSpell)
+	) {
+		const nums = `${hudState.selectedSpell.damage}`.match(/\d+/g);
+		const dmg = nums ? Number(nums[0]) : 6;
+		hudState.enemyHp = Math.max(0, hudState.enemyHp - dmg);
+		log(`[HIT] ${hudState.selectedSpell.name} touche le monstre pour ${dmg}.`);
+		renderHud();
+		if (hudState.enemyHp <= 0) {
+			log("[VICTOIRE] Monstre vaincu.");
+		}
+	} else if (hudState.enemyHp > 0) {
+		log("[SPELL] Aucun monstre à portée.");
+	}
+	renderIsoScene(p);
 	log(
 		`[SPELL_CAST] ${hudState.selectedSpell.name} (${hudState.selectedSpell.pa} PA).`,
 	);
@@ -570,18 +698,61 @@ renderHud();
 
 enterCombatBtn.addEventListener("click", () => {
 	const p = parsePos();
-	const enemyPos = { x: 1, y: 1 };
-	const dist = manhattan(p, enemyPos);
+	const dist = manhattan(p, hudState.enemyPos);
 	if (dist > 2) {
-		log("[COMBAT] Approche-toi d'un groupe de monstres pour engager le combat.");
+		log(
+			"[COMBAT] Approche-toi d'un groupe de monstres pour engager le combat.",
+		);
 		return;
 	}
-	hudState.mode = "COMBAT";
+	hudState.mode = "PLACEMENT";
+	hudState.initiative =
+		Math.random() > 0.5 ? ["PLAYER", "ENEMY"] : ["ENEMY", "PLAYER"];
+	hudState.turn = hudState.initiative[0];
 	hudState.pa = 6;
 	hudState.pm = 3;
+	hudState.hp = 50;
+	hudState.enemyHp = 45;
+	hudState.cooldowns = {};
+	hudState.enemyPos = { x: 1, y: 1 };
+	renderHud();
+	renderSpells(classSelectEl.value);
+	renderSpellBar(classSelectEl.value);
+	log("[COMBAT] Placement en cours. Clique 'Valider placement'.");
+});
+
+resetRunBtn.addEventListener("click", () => {
+	hudState.mode = "EXPLORATION";
+	hudState.turn = "NONE";
+	hudState.initiative = ["PLAYER", "ENEMY"];
+	hudState.hp = 50;
+	hudState.pa = 6;
+	hudState.pm = 3;
+	hudState.enemyHp = 45;
+	hudState.enemyPos = { x: 1, y: 1 };
 	hudState.cooldowns = {};
 	renderHud();
 	renderSpells(classSelectEl.value);
 	renderSpellBar(classSelectEl.value);
-	log("[COMBAT] Combat instancié lancé !");
+	renderGrid([
+		{ characterId: "debug-char", x: 0, y: 0 },
+		{ characterId: "debug-char-2", x: 1, y: 1 },
+	]);
+	renderIsoScene({ x: 0, y: 0 });
+	log("[RESET] Nouvelle partie prête.");
+});
+
+startCombatBtn.addEventListener("click", () => {
+	if (hudState.mode !== "PLACEMENT") {
+		log("[PLACEMENT] Aucun combat en phase de placement.");
+		return;
+	}
+	hudState.mode = "COMBAT";
+	renderHud();
+	log("[COMBAT] Combat démarré !");
+	if (hudState.turn === "ENEMY") {
+		enemyTakeTurn();
+		hudState.turn = "PLAYER";
+		renderHud();
+	}
 });

@@ -3,6 +3,8 @@ const DEFAULT_OPS = {
 	MAP_STATE: 1002,
 	MOVE_REQUEST: 1003,
 	MOVE_RESULT: 1004,
+	START_COMBAT_REQUEST: 1005,
+	PHASE_RESULT: 1006,
 };
 
 const safeParse = raw => {
@@ -21,6 +23,7 @@ class AstralisRealtimeClient {
 		this.handlers = {
 			onMapState: () => {},
 			onMoveResult: () => {},
+			onPhaseResult: () => {},
 		};
 	}
 
@@ -33,6 +36,13 @@ class AstralisRealtimeClient {
 	async joinMap({ mapId, characterId }) {
 		const payload = JSON.stringify({ mapId, characterId });
 		await this.socket.sendMatchState(this.ops.JOIN_MAP, payload);
+	}
+
+	async startCombat() {
+		await this.socket.sendMatchState(
+			this.ops.START_COMBAT_REQUEST,
+			JSON.stringify({}),
+		);
 	}
 
 	async moveTo({ x, y }) {
@@ -54,6 +64,11 @@ class AstralisRealtimeClient {
 
 		if (message.opCode === this.ops.MOVE_RESULT) {
 			this.handlers.onMoveResult(payload);
+			return;
+		}
+
+		if (message.opCode === this.ops.PHASE_RESULT) {
+			this.handlers.onPhaseResult(payload);
 		}
 	}
 }

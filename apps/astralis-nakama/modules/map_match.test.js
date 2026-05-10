@@ -87,18 +87,90 @@ const testMoveAccepted = () => {
 
 	mapLoop({}, { info() {} }, {}, dispatcher, 1, state, [
 		{
+			opCode: OPS.START_COMBAT_REQUEST,
+			data: JSON.stringify({}),
+			sender: basePresence,
+		},
+		{
 			opCode: OPS.MOVE_REQUEST,
 			data: JSON.stringify({ to: { x: 1, y: 0 } }),
 			sender: basePresence,
 		},
 	]);
 
+	assert.equal(dispatcher.messages.length, 2);
+	assert.equal(dispatcher.messages[0].opCode, OPS.PHASE_RESULT);
+	assert.equal(dispatcher.messages[1].opCode, OPS.MOVE_RESULT);
+	assert.equal(dispatcher.messages[1].data.accepted, true);
+	assert.equal(dispatcher.messages[1].data.reason, null);
+	assert.deepEqual(dispatcher.messages[1].data.from, { x: 0, y: 0 });
+	assert.deepEqual(dispatcher.messages[1].data.to, { x: 1, y: 0 });
+};
+
+const testStartCombatIsIdempotent = () => {
+	const state = initState();
+	const dispatcher = makeDispatcher();
+	mapJoin({}, { info() {}, warn() {} }, {}, dispatcher, 0, state, [
+		basePresence,
+	]);
+	dispatcher.messages.length = 0;
+
+	mapLoop({}, { info() {} }, {}, dispatcher, 3, state, [
+		{
+			opCode: OPS.START_COMBAT_REQUEST,
+			data: JSON.stringify({}),
+			sender: basePresence,
+		},
+		{
+			opCode: OPS.START_COMBAT_REQUEST,
+			data: JSON.stringify({}),
+			sender: basePresence,
+		},
+	]);
+
 	assert.equal(dispatcher.messages.length, 1);
-	assert.equal(dispatcher.messages[0].opCode, OPS.MOVE_RESULT);
-	assert.equal(dispatcher.messages[0].data.accepted, true);
-	assert.equal(dispatcher.messages[0].data.reason, null);
-	assert.deepEqual(dispatcher.messages[0].data.from, { x: 0, y: 0 });
-	assert.deepEqual(dispatcher.messages[0].data.to, { x: 1, y: 0 });
+	assert.equal(dispatcher.messages[0].opCode, OPS.PHASE_RESULT);
+	assert.equal(dispatcher.messages[0].data.phase, "COMBAT");
+};
+
+const testStartCombatRejectedForUnknownSender = () => {
+	const state = initState();
+	const dispatcher = makeDispatcher();
+	mapJoin({}, { info() {}, warn() {} }, {}, dispatcher, 0, state, [
+		basePresence,
+	]);
+	dispatcher.messages.length = 0;
+
+	mapLoop({}, { info() {} }, {}, dispatcher, 3, state, [
+		{
+			opCode: OPS.START_COMBAT_REQUEST,
+			data: JSON.stringify({}),
+			sender: { sessionId: "unknown", userId: "ghost" },
+		},
+	]);
+
+	assert.equal(dispatcher.messages.length, 0);
+	assert.equal(state.phase, "PLACEMENT");
+};
+
+const testMoveRejectedBeforeCombat = () => {
+	const state = initState();
+	const dispatcher = makeDispatcher();
+	mapJoin({}, { info() {}, warn() {} }, {}, dispatcher, 0, state, [
+		basePresence,
+	]);
+	dispatcher.messages.length = 0;
+
+	mapLoop({}, { info() {} }, {}, dispatcher, 1, state, [
+		{
+			opCode: OPS.MOVE_REQUEST,
+			data: JSON.stringify({ to: { x: 1, y: 0 } }),
+			sender: basePresence,
+		},
+	]);
+
+	assert.equal(dispatcher.messages[0].data.accepted, false);
+	assert.equal(dispatcher.messages[0].data.reason, "NOT_IN_COMBAT");
 };
 
 const testMoveRejectedWhenTooFastSameTick = () => {
@@ -111,6 +183,11 @@ const testMoveRejectedWhenTooFastSameTick = () => {
 
 	mapLoop({}, { info() {} }, {}, dispatcher, 5, state, [
 		{
+			opCode: OPS.START_COMBAT_REQUEST,
+			data: JSON.stringify({}),
+			sender: basePresence,
+		},
+		{
 			opCode: OPS.MOVE_REQUEST,
 			data: JSON.stringify({ to: { x: 1, y: 0 } }),
 			sender: basePresence,
@@ -122,10 +199,10 @@ const testMoveRejectedWhenTooFastSameTick = () => {
 		},
 	]);
 
-	assert.equal(dispatcher.messages.length, 2);
-	assert.equal(dispatcher.messages[0].data.accepted, true);
-	assert.equal(dispatcher.messages[1].data.accepted, false);
-	assert.equal(dispatcher.messages[1].data.reason, "TOO_FAST");
+	assert.equal(dispatcher.messages.length, 3);
+	assert.equal(dispatcher.messages[1].data.accepted, true);
+	assert.equal(dispatcher.messages[2].data.accepted, false);
+	assert.equal(dispatcher.messages[2].data.reason, "TOO_FAST");
 };
 
 const testMoveRejectedOutsideBounds = () => {
@@ -138,14 +215,19 @@ const testMoveRejectedOutsideBounds = () => {
 
 	mapLoop({}, { info() {} }, {}, dispatcher, 2, state, [
 		{
+			opCode: OPS.START_COMBAT_REQUEST,
+			data: JSON.stringify({}),
+			sender: basePresence,
+		},
+		{
 			opCode: OPS.MOVE_REQUEST,
 			data: JSON.stringify({ to: { x: -1, y: 0 } }),
 			sender: basePresence,
 		},
 	]);
 
-	assert.equal(dispatcher.messages[0].data.accepted, false);
-	assert.equal(dispatcher.messages[0].data.reason, "INVALID_CELL");
+	assert.equal(dispatcher.messages[1].data.accepted, false);
+	assert.equal(dispatcher.messages[1].data.reason, "INVALID_CELL");
 };
 
 const testMoveRejectedWhenTooFar = () => {
@@ -158,14 +240,19 @@ const testMoveRejectedWhenTooFar = () => {
 
 	mapLoop({}, { info() {} }, {}, dispatcher, 9, state, [
 		{
+			opCode: OPS.START_COMBAT_REQUEST,
+			data: JSON.stringify({}),
+			sender: basePresence,
+		},
+		{
 			opCode: OPS.MOVE_REQUEST,
 			data: JSON.stringify({ to: { x: 3, y: 0 } }),
 			sender: basePresence,
 		},
 	]);
 
-	assert.equal(dispatcher.messages[0].data.accepted, false);
-	assert.equal(dispatcher.messages[0].data.reason, "TOO_FAR");
+	assert.equal(dispatcher.messages[1].data.accepted, false);
+	assert.equal(dispatcher.messages[1].data.reason, "TOO_FAR");
 };
 
 const testMoveRejectedWhenCellOccupied = () => {
@@ -179,14 +266,19 @@ const testMoveRejectedWhenCellOccupied = () => {
 
 	mapLoop({}, { info() {} }, {}, dispatcher, 4, state, [
 		{
+			opCode: OPS.START_COMBAT_REQUEST,
+			data: JSON.stringify({}),
+			sender: basePresence,
+		},
+		{
 			opCode: OPS.MOVE_REQUEST,
 			data: JSON.stringify({ to: { x: 1, y: 0 } }),
 			sender: basePresence,
 		},
 	]);
 
-	assert.equal(dispatcher.messages[0].data.accepted, false);
-	assert.equal(dispatcher.messages[0].data.reason, "CELL_OCCUPIED");
+	assert.equal(dispatcher.messages[1].data.accepted, false);
+	assert.equal(dispatcher.messages[1].data.reason, "CELL_OCCUPIED");
 };
 
 const run = () => {
@@ -194,6 +286,9 @@ const run = () => {
 	testJoinAllocatesDifferentSpawnCells();
 	testLeaveBroadcastsUpdatedMapState();
 	testMoveAccepted();
+	testStartCombatIsIdempotent();
+	testStartCombatRejectedForUnknownSender();
+	testMoveRejectedBeforeCombat();
 	testMoveRejectedWhenTooFastSameTick();
 	testMoveRejectedOutsideBounds();
 	testMoveRejectedWhenTooFar();

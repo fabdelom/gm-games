@@ -12,6 +12,11 @@ const testJoin = () => {
 
 const testMoveRules = () => {
 	const sim = new LocalAuthoritativeSimulator();
+	const blocked = sim.moveTo({ x: 1, y: 0 });
+	assert.equal(blocked.data.accepted, false);
+	assert.equal(blocked.data.reason, "NOT_IN_COMBAT");
+
+	sim.startCombat();
 	const ok = sim.moveTo({ x: 1, y: 0 });
 	assert.equal(ok.data.accepted, true);
 

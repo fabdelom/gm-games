@@ -15,6 +15,7 @@ class LocalAuthoritativeSimulator {
 		this.position = { x: 0, y: 0 };
 		this.lastMoveTick = -1;
 		this.tick = 0;
+		this.phase = "PLACEMENT";
 	}
 
 	joinMap({ mapId, characterId }) {
@@ -27,13 +28,20 @@ class LocalAuthoritativeSimulator {
 		};
 	}
 
+	startCombat() {
+		this.phase = "COMBAT";
+		return { opCode: 1006, data: { phase: this.phase } };
+	}
+
 	moveTo(to) {
 		this.tick += 1;
 		const from = { ...this.position };
 		let accepted = false;
 		let reason = null;
 
-		if (!inBounds(to.x, to.y)) {
+		if (this.phase !== "COMBAT") {
+			reason = "NOT_IN_COMBAT";
+		} else if (!inBounds(to.x, to.y)) {
 			reason = "INVALID_CELL";
 		} else if (manhattan(from, to) > 1) {
 			reason = "TOO_FAR";
